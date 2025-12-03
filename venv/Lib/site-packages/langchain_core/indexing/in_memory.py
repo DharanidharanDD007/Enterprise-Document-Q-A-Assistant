@@ -1,7 +1,12 @@
+"""In memory document index."""
+
+import operator
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, cast
+from collections.abc import Sequence
+from typing import Any, Optional, cast
 
 from pydantic import Field
+from typing_extensions import override
 
 from langchain_core._api import beta
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
@@ -22,9 +27,10 @@ class InMemoryDocumentIndex(DocumentIndex):
     .. versionadded:: 0.2.29
     """
 
-    store: Dict[str, Document] = Field(default_factory=dict)
+    store: dict[str, Document] = Field(default_factory=dict)
     top_k: int = 4
 
+    @override
     def upsert(self, items: Sequence[Document], /, **kwargs: Any) -> UpsertResponse:
         """Upsert items into the index."""
         ok_ids = []
@@ -39,14 +45,16 @@ class InMemoryDocumentIndex(DocumentIndex):
                 id_ = item.id
 
             self.store[id_] = item_
-            ok_ids.append(cast(str, item_.id))
+            ok_ids.append(cast("str", item_.id))
 
         return UpsertResponse(succeeded=ok_ids, failed=[])
 
-    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> DeleteResponse:
+    @override
+    def delete(self, ids: Optional[list[str]] = None, **kwargs: Any) -> DeleteResponse:
         """Delete by ID."""
         if ids is None:
-            raise ValueError("IDs must be provided for deletion")
+            msg = "IDs must be provided for deletion"
+            raise ValueError(msg)
 
         ok_ids = []
 
@@ -59,24 +67,20 @@ class InMemoryDocumentIndex(DocumentIndex):
             succeeded=ok_ids, num_deleted=len(ok_ids), num_failed=0, failed=[]
         )
 
-    def get(self, ids: Sequence[str], /, **kwargs: Any) -> List[Document]:
+    @override
+    def get(self, ids: Sequence[str], /, **kwargs: Any) -> list[Document]:
         """Get by ids."""
-        found_documents = []
+        return [self.store[id_] for id_ in ids if id_ in self.store]
 
-        for id_ in ids:
-            if id_ in self.store:
-                found_documents.append(self.store[id_])
-
-        return found_documents
-
+    @override
     def _get_relevant_documents(
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
-    ) -> List[Document]:
+    ) -> list[Document]:
         counts_by_doc = []
 
         for document in self.store.values():
             count = document.page_content.count(query)
             counts_by_doc.append((document, count))
 
-        counts_by_doc.sort(key=lambda x: x[1], reverse=True)
+        counts_by_doc.sort(key=operator.itemgetter(1), reverse=True)
         return [doc.model_copy() for doc, count in counts_by_doc[: self.top_k]]

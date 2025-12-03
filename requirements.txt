@@ -8,3 +8,6 @@ langchain-text-splitters==0.3.0
 langchain-openai
 chromadb
 pypdf
+gTTS
+python-dotenv
+pydantic
